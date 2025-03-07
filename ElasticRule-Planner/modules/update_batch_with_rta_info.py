@@ -16,7 +16,8 @@ def get_rta_rule_ids():
     """Get all rule IDs from the RTA tests."""
     rule_ids = set()
     rule_id_to_file = {}
-    rta_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "rules", "detection-rules", "rta")
+    # Fix the path to the RTA directory - need to go up one more level
+    rta_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "rules", "detection-rules", "rta")
     
     print(f"Checking RTA directory: {rta_dir}")
     
@@ -28,12 +29,20 @@ def get_rta_rule_ids():
                 try:
                     with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
                         content = f.read()
-                        matches = re.findall(r'rule_id\": \"([^\"]+)\"', content)
+                        
+                        # Standard pattern for simple rule_id references
+                        matches = re.findall(r'rule_id[\"\']?\s*[:=]\s*[\"\']([^\"\']+)[\"\']', content)
+                        
+                        # Additional pattern for list structures with rule_id in JSON-like objects
+                        list_matches = re.findall(r'\{[^}]*\"rule_id\":\s*\"([^\"]+)\"[^}]*\}', content)
+                        matches.extend(list_matches)
+                        
                         for match in matches:
                             rule_ids.add(match)
                             if match not in rule_id_to_file:
                                 rule_id_to_file[match] = []
-                            rule_id_to_file[match].append(file)
+                            if file not in rule_id_to_file[match]:
+                                rule_id_to_file[match].append(file)
                 except Exception as e:
                     print(f"Error reading {file}: {e}")
     
@@ -46,8 +55,9 @@ def update_batch_files():
     rta_rule_ids, rule_id_to_file = get_rta_rule_ids()
     
     # Find the most recent batch report directory
+    # Fix the path to the Output directory - need to go up one more level
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.join(base_dir, "..", "Output")
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "Output")
     
     batch_dirs = [d for d in os.listdir(output_dir) if d.startswith("batch_report_")]
     if not batch_dirs:
@@ -73,18 +83,9 @@ def update_batch_files():
         
         # Read the batch file
         rows = []
-        fieldnames = []
         with open(batch_path, 'r', newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
-            fieldnames = reader.fieldnames
-            
-            # Add new fields if they don't exist
-            if 'has_rta_test' not in fieldnames:
-                fieldnames.append('has_rta_test')
-            if 'rta_test_files' not in fieldnames:
-                fieldnames.append('rta_test_files')
-            if 'adjusted_complexity' not in fieldnames:
-                fieldnames.append('adjusted_complexity')
+            original_fieldnames = reader.fieldnames
             
             # Process each row
             for row in reader:
@@ -110,6 +111,44 @@ def update_batch_files():
                 row['adjusted_complexity'] = str(adjusted_complexity)
                 
                 rows.append(row)
+        
+        # Define the order of columns according to requirements
+        ordered_fields = [
+            'rule_name',                # 1. rule_name
+            'rule_description',         # 2. rule_description
+            'rule_rule_id',             # 3. rule_id
+            'os_types',                 # 4. os_types
+            'mitre_tactics',            # 5. mitre_tactics
+            'mitre_techniques',         # 6. mitre_techniques
+            'suggested_batch',          # 7. suggested_batch
+            'priority',                 # 8. batch priority
+            'complexity',               # 9. complexity
+            'rule_query',               # 10. rule_query
+            # Additional fields in a logical order for analysts
+            'prerequisites',
+            'rta_test_files',
+            'is_aws_related',
+            'is_network_related',
+            'rule_severity',
+            'rule_risk_score',
+            'has_rta_test',
+            'adjusted_complexity',
+            'related_rules',
+            'rule_category'
+        ]
+        
+        # Get all available fields from the rows
+        all_fields = set()
+        for row in rows:
+            all_fields.update(row.keys())
+        
+        # Create the final fieldnames list
+        # First add the ordered fields that exist in the data
+        fieldnames = [field for field in ordered_fields if field in all_fields]
+        
+        # Then add any remaining fields that weren't in our ordered list
+        remaining_fields = sorted(list(all_fields - set(fieldnames)))
+        fieldnames.extend(remaining_fields)
         
         # Write the updated batch file
         with open(batch_path, 'w', newline='', encoding='utf-8') as f:

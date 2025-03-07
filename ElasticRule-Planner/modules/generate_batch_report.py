@@ -113,14 +113,32 @@ def generate_batch_report(csv_file, output_dir):
             # Generate detailed batch file
             batch_file = os.path.join(report_dir, f"batch_{batch}_details.csv")
             with open(batch_file, 'w', newline='', encoding='utf-8') as batch_f:
-                # Select relevant fields for the batch CSV
+                # Select relevant fields for the batch CSV and order them according to requirements
                 fieldnames = [
-                    'rule_name', 'rule_description', 'os_types', 'is_aws_related',
-                    'complexity', 'priority', 'prerequisites', 'mitre_tactics',
-                    'mitre_techniques', 'rule_rule_id', 'rule_severity', 'rule_risk_score'
+                    'rule_name',                # 1. rule_name
+                    'rule_description',         # 2. rule_description
+                    'rule_rule_id',             # 3. rule_id
+                    'os_types',                 # 4. os_types
+                    'mitre_tactics',            # 5. mitre_tactics
+                    'mitre_techniques',         # 6. mitre_techniques
+                    'suggested_batch',          # 7. suggested_batch
+                    'priority',                 # 8. batch priority
+                    'complexity',               # 9. complexity
+                    'rule_query',               # 10. rule_query
+                    # Additional fields in a logical order for analysts
+                    'prerequisites',
+                    'rta_test_files',
+                    'is_aws_related',
+                    'is_network_related',
+                    'rule_severity',
+                    'rule_risk_score',
+                    'has_rta_test',
+                    'adjusted_complexity',
+                    'related_rules',
+                    'rule_category'
                 ]
                 
-                writer = csv.DictWriter(batch_f, fieldnames=fieldnames)
+                writer = csv.DictWriter(batch_f, fieldnames=fieldnames, extrasaction='ignore')
                 writer.writeheader()
                 
                 for rule in sorted_rules:

@@ -234,10 +234,17 @@ def is_macos_only(os_types):
     
     return "macOS" in os_types and "Windows" not in os_types and "Linux" not in os_types
 
-def process_toml_files(rules_dir, output_file):
+def process_toml_files(rules_dir, output_file, os_filter=None, aws_filter=None):
     """
     Process all .toml files in the rules directory, filter based on criteria,
     and write the results to a CSV file.
+    
+    Args:
+        rules_dir (str): Directory containing the rule TOML files
+        output_file (str): Path to the output CSV file
+        os_filter (str, optional): Filter rules by OS type ('windows', 'linux', 'macos', or None for all)
+        aws_filter (str, optional): Filter AWS-related rules ('include' to only include AWS rules, 
+                                   'exclude' to exclude AWS rules, or None for no filtering)
     """
     # Get all .toml files recursively
     toml_files = []
@@ -249,6 +256,12 @@ def process_toml_files(rules_dir, output_file):
     print(f"Found {len(toml_files)} .toml files")
     print(f"Rules directory: {rules_dir}")
     print(f"First few files: {toml_files[:5] if toml_files else 'No files found'}")
+    
+    if os_filter:
+        print(f"Filtering rules by OS: {os_filter}")
+    
+    if aws_filter:
+        print(f"AWS filter: {aws_filter}")
     
     # Process each file and collect rules that meet the criteria
     valid_rules = []
@@ -280,6 +293,15 @@ def process_toml_files(rules_dir, output_file):
             if references_external_media(rule_data) == "Yes":
                 continue
             
+            # Apply OS filter if specified
+            if os_filter and os_filter.lower() != "all":
+                # Skip if the rule doesn't match the OS filter
+                if not os_types:
+                    # If no OS is specified, assume it's applicable to all OSes
+                    pass
+                elif os_filter.lower() not in [os.lower() for os in os_types.split(", ")]:
+                    continue
+            
             # Add the file path as a reference
             rule_data['file_path'] = file_path
             
@@ -299,7 +321,15 @@ def process_toml_files(rules_dir, output_file):
             flattened_rule['rule_category'] = extract_rule_category(file_path)
             
             # Add AWS-related field
-            flattened_rule['is_aws_related'] = is_aws_related(rule_data, file_path)
+            is_aws = is_aws_related(rule_data, file_path)
+            flattened_rule['is_aws_related'] = is_aws
+            
+            # Apply AWS filter if specified
+            if aws_filter:
+                if aws_filter.lower() == 'include' and is_aws != "Yes":
+                    continue  # Skip non-AWS rules when including only AWS rules
+                elif aws_filter.lower() == 'exclude' and is_aws == "Yes":
+                    continue  # Skip AWS rules when excluding AWS rules
             
             # Update the set of all fields
             all_fields.update(flattened_rule.keys())

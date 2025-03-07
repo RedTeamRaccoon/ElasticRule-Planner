@@ -352,14 +352,44 @@ def enhance_csv_for_batch_planning(input_file, output_file, num_batches=6):
         related_rules = dependencies.get(rule_id, [])
         rule['related_rules'] = json.dumps(related_rules)
     
-    # Write the enhanced CSV file
-    fieldnames = list(rules[0].keys())
+    # Write the enhanced CSV file with columns ordered according to requirements
+    # Define the order of columns
+    ordered_fields = [
+        'rule_name',                # 1. rule_name
+        'rule_description',         # 2. rule_description
+        'rule_rule_id',             # 3. rule_id
+        'os_types',                 # 4. os_types
+        'mitre_tactics',            # 5. mitre_tactics
+        'mitre_techniques',         # 6. mitre_techniques
+        'suggested_batch',          # 7. suggested_batch
+        'priority',                 # 8. batch priority
+        'complexity',               # 9. complexity
+        'rule_query',               # 10. rule_query
+        # Additional fields in a logical order for analysts
+        'prerequisites',
+        'rta_test_files',
+        'is_aws_related',
+        'is_network_related',
+        'rule_severity',
+        'rule_risk_score',
+        'has_rta_test',
+        'adjusted_complexity',
+        'related_rules',
+        'rule_category'
+    ]
     
-    # Move the new fields to the beginning for better visibility
-    for field in ['suggested_batch', 'complexity', 'priority', 'prerequisites', 'related_rules']:
-        if field in fieldnames:
-            fieldnames.remove(field)
-            fieldnames.insert(0, field)
+    # Get all available fields from the rules
+    all_fields = set()
+    for rule in rules:
+        all_fields.update(rule.keys())
+    
+    # Create the final fieldnames list
+    # First add the ordered fields that exist in the data
+    fieldnames = [field for field in ordered_fields if field in all_fields]
+    
+    # Then add any remaining fields that weren't in our ordered list
+    remaining_fields = sorted(list(all_fields - set(fieldnames)))
+    fieldnames.extend(remaining_fields)
     
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)

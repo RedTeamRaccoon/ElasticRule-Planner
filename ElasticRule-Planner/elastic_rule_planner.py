@@ -44,8 +44,15 @@ batch_planner = import_module_from_file("batch_planner", os.path.join(BASE_DIR, 
 generate_batch_report = import_module_from_file("generate_batch_report", os.path.join(BASE_DIR, "modules", "generate_batch_report.py"))
 update_batch_with_rta_info = import_module_from_file("update_batch_with_rta_info", os.path.join(BASE_DIR, "modules", "update_batch_with_rta_info.py"))
 
-def extract_rules():
-    """Extract rules from TOML files."""
+def extract_rules(os_filter=None, aws_filter=None):
+    """
+    Extract rules from TOML files.
+    
+    Args:
+        os_filter (str, optional): Filter rules by OS type ('windows', 'linux', 'macos', or None for all)
+        aws_filter (str, optional): Filter AWS-related rules ('include' to only include AWS rules, 
+                                   'exclude' to exclude AWS rules, or None for no filtering)
+    """
     print("\n=== Extracting Rules ===\n")
     
     # Generate a timestamp for the output file
@@ -53,7 +60,7 @@ def extract_rules():
     output_file = os.path.join(OUTPUT_DIR, f"elastic_rules_{timestamp}.csv")
     
     # Process the TOML files and create the CSV
-    rule_extractor.process_toml_files(RULES_DIR, output_file)
+    rule_extractor.process_toml_files(RULES_DIR, output_file, os_filter, aws_filter)
     
     return output_file
 
@@ -256,14 +263,37 @@ def list_batches(show_rule_counts=False):
     
     return 0
 
-def interactive_mode():
-    """Run in interactive mode, prompting the user for input."""
+def interactive_mode(os_filter=None, aws_filter=None):
+    """
+    Run in interactive mode, prompting the user for input.
+    
+    Args:
+        os_filter (str, optional): Filter rules by OS type ('windows', 'linux', 'macos', or None for all)
+        aws_filter (str, optional): Filter AWS-related rules ('include' to only include AWS rules, 
+                                   'exclude' to exclude AWS rules, or None for no filtering)
+    """
     print("=== Elastic Rule Planner Interactive Mode ===\n")
     
     # Step 1: Extract rules
     print("Step 1: Extract rules from TOML files")
+    if os_filter is None:
+        os_filter = input("Enter OS filter (windows/linux/macos/all, default=all): ").lower()
+        if not os_filter or os_filter not in ["windows", "linux", "macos", "all"]:
+            os_filter = None
+        elif os_filter == "all":
+            os_filter = None
+    else:
+        print(f"Using OS filter: {os_filter}")
+    
+    if aws_filter is None:
+        aws_filter = input("Enter AWS filter (include/exclude/none, default=none): ").lower()
+        if not aws_filter or aws_filter not in ["include", "exclude"]:
+            aws_filter = None
+    else:
+        print(f"Using AWS filter: {aws_filter}")
+    
     input("Press Enter to continue...")
-    rules_file = extract_rules()
+    rules_file = extract_rules(os_filter, aws_filter)
     
     # Step 2: Plan batches
     print("\nStep 2: Plan batches for testing")
@@ -331,6 +361,8 @@ def main():
     
     # Extract rules command
     extract_parser = subparsers.add_parser("extract", help="Extract rules from TOML files")
+    extract_parser.add_argument("-o", "--os-filter", choices=["windows", "linux", "macos", "all"], default=None, help="Filter rules by OS")
+    extract_parser.add_argument("-a", "--aws-filter", choices=["include", "exclude"], default=None, help="Filter AWS rules ('include' to only include AWS rules, 'exclude' to exclude AWS rules)")
     
     # Plan batches command
     plan_parser = subparsers.add_parser("plan", help="Plan batches for testing")
@@ -361,9 +393,12 @@ def main():
     all_parser.add_argument("--run", action="store_true", help="Also run RTA tests after generating reports")
     all_parser.add_argument("-b", "--batch", type=int, help="Batch number to run tests for (if --run is specified)")
     all_parser.add_argument("-o", "--os-filter", choices=["windows", "linux", "macos", "all"], default="all", help="Filter tests by OS (if --run is specified)")
+    all_parser.add_argument("-a", "--aws-filter", choices=["include", "exclude"], default=None, help="Filter AWS rules ('include' to only include AWS rules, 'exclude' to exclude AWS rules)")
     
     # Interactive mode command
     interactive_parser = subparsers.add_parser("interactive", help="Run in interactive mode, prompting for input")
+    interactive_parser.add_argument("-o", "--os-filter", choices=["windows", "linux", "macos", "all"], default=None, help="Filter rules by OS")
+    interactive_parser.add_argument("-a", "--aws-filter", choices=["include", "exclude"], default=None, help="Filter AWS rules ('include' to only include AWS rules, 'exclude' to exclude AWS rules)")
     
     # Parse arguments
     args = parser.parse_args()
@@ -375,7 +410,7 @@ def main():
     
     # Execute the appropriate command
     if args.command == "extract":
-        extract_rules()
+        extract_rules(args.os_filter, args.aws_filter)
     
     elif args.command == "plan":
         # Find the most recent extracted rules file if not specified
@@ -433,7 +468,7 @@ def main():
     
     elif args.command == "all":
         # Run all steps in sequence
-        rules_file = extract_rules()
+        rules_file = extract_rules(args.os_filter, args.aws_filter)
         batched_file = plan_batches(rules_file)
         report_dir = generate_report(batched_file)
         update_with_rta_info()
@@ -447,7 +482,7 @@ def main():
             run_rta_tests(args.batch, args.os_filter)
     
     elif args.command == "interactive":
-        interactive_mode()
+        interactive_mode(args.os_filter, args.aws_filter)
     
     return 0
 
